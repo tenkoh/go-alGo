@@ -59,6 +59,11 @@ func NewBucket(size int, refillInterval time.Duration) (*Bucket, error) {
 }
 
 // Get returns a channel that will sent a token when one is available.
-func (b *Bucket) Get(ctx context.Context) <-chan struct{} {
-	return b.bucket
+func (b *Bucket) Get(ctx context.Context) error {
+	select {
+	case <-b.bucket:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
