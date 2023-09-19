@@ -14,6 +14,22 @@ import (
 // 5. bucketには最大値を超えてtokenを補充できない
 // 6. bucketの最大サイズは1以上でなければならない
 // 7. bucketの補充間隔は0より大きくなければならない
+// 8. bucketはクローズできる。クローズしたbucketからの取り出しはエラーになる。
+
+func TestNewBucket(t *testing.T) {
+	// 6. bucketの最大サイズは1以上でなければならない
+	if _, err := tbucket.NewBucket(0, 1*time.Second); err == nil {
+		t.Error("want error: bucket size is not larger than 0, but got nil")
+	}
+	// 7. bucketの補充間隔は0より大きくなければならない
+	if _, err := tbucket.NewBucket(1, 0); err == nil {
+		t.Error("want error: interval is not larger than 0, but got nil")
+	}
+
+	if _, err := tbucket.NewBucket(1, 1*time.Nanosecond); err != nil {
+		t.Errorf("want no error, but got %v", err)
+	}
+}
 
 func TestBucket_Get(t *testing.T) {
 	bucketSize := 3
