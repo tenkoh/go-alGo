@@ -3,9 +3,10 @@ package tbucket_test
 import (
 	"context"
 	"errors"
-	"tbucket"
 	"testing"
 	"time"
+
+	"github.com/tenkoh/go-alGo/tbucket"
 )
 
 // 1. ok bucketに空きがある場合はtokenを取り出せる
