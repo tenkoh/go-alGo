@@ -2,6 +2,7 @@ package tbucket_test
 
 import (
 	"context"
+	"errors"
 	"tbucket"
 	"testing"
 	"time"
@@ -11,10 +12,10 @@ import (
 // 2. ok bucketに空きがない場合はtokenを取り出せない(ブロックされる)
 // 3. ok bucketからの取り出しはキャンセルできる
 // 4. ok bucketには決めた間隔でtokenが補充される
-// 5. bucketには最大値を超えてtokenを補充できない
-// 6. bucketの最大サイズは1以上でなければならない
-// 7. bucketの補充間隔は0より大きくなければならない
-// 8. bucketはクローズできる。クローズしたbucketからの取り出しはエラーになる。
+// 5. 自明 bucketには最大値を超えてtokenを補充できない
+// 6. ok bucketの最大サイズは1以上でなければならない
+// 7. ok bucketの補充間隔は0より大きくなければならない
+// 8. ok bucketはクローズできる。クローズしたbucketからの取り出しはエラーになる。
 
 func TestNewBucket(t *testing.T) {
 	// 6. bucketの最大サイズは1以上でなければならない
@@ -31,10 +32,52 @@ func TestNewBucket(t *testing.T) {
 	}
 }
 
+func TestBucket_Close(t *testing.T) {
+	interval := 10 * time.Second // 補充されない十分大きいインターバルを設定する
+	ctx := context.Background()
+
+	// bucketをクローズした後に新たなGetができないことを確認する
+	b, err := tbucket.NewBucket(1, interval)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	b.Close()
+	if err := b.Get(ctx); !errors.Is(err, tbucket.ErrBucketClosed) {
+		t.Errorf("want error: bucket is closed, but got %v", err)
+	}
+
+	// bucketをクローズした後に既存のGetがエラーを返すことを確認する
+	b, err = tbucket.NewBucket(1, interval)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	var errch = make(chan error, 1)
+
+	b.Get(ctx) // bucketを空にする
+
+	go func() {
+		errch <- b.Get(ctx)
+	}()
+
+	// wait for the goroutine to start
+	// [TODO] sleepによる待ち合わせは不確実なため、より確実な方法を検討する
+	<-time.After(100 * time.Millisecond)
+	b.Close()
+
+	if err := <-errch; !errors.Is(err, tbucket.ErrBucketClosed) {
+		t.Errorf("want error: bucket is just closed, but got %v", err)
+	}
+
+}
+
 func TestBucket_Get(t *testing.T) {
 	bucketSize := 3
 	interval := 500 * time.Millisecond
-	tolerance := interval / 10
+	tolerance := interval / 10 // 許容する誤差.time.Tickerのテストにも同様の考えがある
 
 	ctx := context.Background()
 

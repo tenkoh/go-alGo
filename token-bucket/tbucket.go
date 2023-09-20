@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+// ErrBucketClosed is returned when the bucket is closed.
+var ErrBucketClosed = errors.New("bucket is closed")
+
 // Bucket is a token bucket.
 // Tokens are added to the bucket at a fixed interval.
 type Bucket struct {
@@ -43,11 +46,7 @@ func NewBucket(size int, refillInterval time.Duration) (*Bucket, error) {
 	go func() {
 		wg.Done()
 		for {
-			_, ok := <-b.ticker.C
-			if !ok {
-				close(b.bucket)
-				return
-			}
+			<-b.ticker.C
 			if len(b.bucket) < size {
 				b.bucket <- struct{}{}
 			}
@@ -58,12 +57,28 @@ func NewBucket(size int, refillInterval time.Duration) (*Bucket, error) {
 	return b, nil
 }
 
-// Get returns a channel that will sent a token when one is available.
+// Get returns block the response until a token is available.
+// If the context is canceled, it returns an error.
+// If the bucket is closed, it returns an error.
 func (b *Bucket) Get(ctx context.Context) error {
 	select {
-	case <-b.bucket:
+	case _, ok := <-b.bucket:
+		if !ok {
+			return ErrBucketClosed
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// Close closes the bucket. After closing, Get returns an error.
+func (b *Bucket) Close() {
+	// stop refilling the bucket
+	b.ticker.Stop()
+	close(b.bucket)
+	// remove all tokens from the bucket
+	for range b.bucket {
+		continue
 	}
 }
